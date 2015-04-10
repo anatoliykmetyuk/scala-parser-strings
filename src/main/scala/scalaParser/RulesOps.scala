@@ -14,6 +14,7 @@ trait RulesOps {
   def ConcatSeqSemi    = ConcatSeq(";")
   def ConcatSeqNoDelim = ConcatSeq("" )
   def ConcatSeqComma   = ConcatSeq(",")
+  def ConcatSeqDot     = ConcatSeq(".")
 
   def ExtractOpt: Option[String] => String = _.getOrElse("")
 

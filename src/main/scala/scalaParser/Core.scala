@@ -4,7 +4,7 @@ import org.parboiled2._
 
 import scala.language.implicitConversions
 
-abstract class Core extends Parser with syntax.Basic with syntax.Literals with syntax.Identifiers {
+abstract class Core extends Parser with syntax.Basic with syntax.Literals with syntax.Identifiers with RulesOps {
   // Aliases for common things. These things are used in almost every parser
   // in the file, so it makes sense to keep them short.
   type R0 = Rule0
@@ -13,21 +13,21 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
    * really useful in e.g. {} blocks, where we want to avoid
    * capturing newlines so semicolon-inference would work
    */
-  def WS = rule( (Basic.WSChar | Literals.Comment).* )
+  def WS: R1 = rule( (capture(Basic.WSChar) | Literals.Comment).* ~> ConcatSeqNoDelim )
 
   /**
    * Parses whitespace, including newlines.
    * This is the default for most things
    */
-  def WL = rule( (Basic.WSChar | Literals.Comment | Basic.Newline).* )
+  def WL: R1 = rule( (capture(Basic.WSChar) | Literals.Comment | capture(Basic.Newline)).* ~> ConcatSeqNoDelim )
 
 
   /**
    * By default, all strings and characters greedily
    * capture all whitespace immediately before the token.
    */
-  private implicit def wspStr(s: String) = rule( WL ~ str(s) )
-  private implicit def wspCh(s: Char) = rule( WL ~ ch(s) )
+  private implicit def wspStr(s: String): R1 = rule( WL ~ capture(str(s)) ~> Concat )
+  private implicit def wspCh (s: Char  ): R1 = rule( WL ~ capture(ch (s)) ~> Concat )
   /**
    * Most keywords don't just require the correct characters to match,
    * they have to ensure that subsequent characters *don't* match in
@@ -35,8 +35,8 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
    * (W) and key-operators (O) which have different non-match criteria.
    */
   object KeyWordOperators {
-    def W(s: String) = rule( WL ~ Key.W(s) )
-    def O(s: String) = rule( WL ~ Key.O(s) )
+    def W(s: String): R1 = rule( WL ~ capture(Key.W(s)) ~> Concat )
+    def O(s: String): R1 = rule( WL ~ capture(Key.O(s)) ~> Concat )
   }
   import KeyWordOperators._
   // Keywords that match themselves and nothing else
@@ -90,34 +90,37 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
 
   // kinda-sorta keywords that are common patterns even if not
   // really-truly keywords
-  def `_*` = rule( `_` ~ "*" )
-  def `}` = rule( Semis.? ~ '}' )
-  def `{` = rule( '{' ~ Semis.? )
+  def `_*`: R1 = rule( `_` ~ "*" ~> Concat )
+  def `}` : R1 = rule( Semis.? ~> ExtractOpt ~ '}' ~> Concat )
+  def `{` : R1 = rule( '{' ~ (Semis.? ~> ExtractOpt) ~> Concat )
   /**
    * helper printing function
    */
   def pr(s: String) = rule( run(println(s"LOGGING $cursor: $s")) )
 
-  def Id = rule( WL ~ Identifiers.Id )
-  def VarId = rule( WL ~ Identifiers.VarId )
-  def Literal = rule( WL ~ Literals.Literal )
-  def Semi = rule( WS ~ Basic.Semi )
-  def Semis = rule( Semi.+ )
-  def Newline = rule( WL ~ Basic.Newline )
+  def Id     : R1 = rule( WL ~ capture(Identifiers.Id)    ~> Concat )
+  def VarId  : R1 = rule( WL ~ capture(Identifiers.VarId) ~> Concat )
+  def Literal: R1 = rule( WL ~ Literals.Literal           ~> Concat )
+  def Semi   : R1 = rule( WS ~ capture(Basic.Semi)        ~> Concat )
+  def Semis  : R1 = rule( Semi.+                          ~> ConcatSeqNoDelim )
+  def Newline: R1 = rule( WL ~ capture(Basic.Newline)     ~> Concat )
 
-  def QualId = rule( WL ~ Id.+('.') )
-  def Ids = rule( Id.+(',') )
+  def QualId: R1 = rule( WL ~ (Id.+('.') ~> ConcatSeqDot)~> Concat )
+  def Ids   : R1 = rule( Id.+(',') ~> ConcatSeqDot )
 
   def NotNewline: R0 = rule( &( WS ~ !Basic.Newline ) )
-  def OneNLMax: R0 = {
-    def WSChar = rule( Basic.WSChar.* )
-    def ConsumeComments = rule( (WSChar ~ Literals.Comment ~ WSChar ~ Basic.Newline).* )
-    rule( WS ~ Basic.Newline.? ~ ConsumeComments ~ NotNewline )
+  def OneNLMax: R1 = {
+    def WSChar: R1 = rule( capture(Basic.WSChar.*) )
+    def ConsumeComments: R1 = rule( (WSChar ~ Literals.Comment ~ WSChar ~ capture(Basic.Newline) ~> Concat4).* ~> ConcatSeqNoDelim )
+    rule( WS ~ capture(Basic.Newline.?) ~ ConsumeComments ~ NotNewline ~> Concat3 )
   }
-  def StableId: R0 = {
-    def ClassQualifier = rule( '[' ~ Id ~ ']' )
-    def ThisSuper = rule( `this` | `super` ~ ClassQualifier.? )
-    rule( (Id ~ '.').* ~ ThisSuper ~ ('.' ~ Id).* | Id ~ ('.' ~ Id).* )
+  def StableId: R1 = {
+    def ClassQualifier: R1 = rule( '[' ~ Id ~ ']' ~> Concat3 )
+    def ThisSuper     : R1 = rule( `this` | `super` ~ (ClassQualifier.? ~> ExtractOpt) ~> Concat )
+    rule(
+      (Id ~ '.' ~> Concat).* ~> ConcatSeqNoDelim ~ ThisSuper ~ (('.' ~ Id ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat3 |
+      Id ~ (('.' ~ Id ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat
+    )
   }
 
 }
