@@ -35,5 +35,10 @@ val root = project.in(file(".")).settings(
         </developer>
       </developers>,
 
-  excludeFilter in unmanagedSources := "Core.scala" || "Types.scala" || "Exprs.scala" || "Scala.scala" || "Xml.scala"
+  excludeFilter in unmanagedSources := "Core.scala" || "Types.scala" || "Exprs.scala" || "Scala.scala" || "Xml.scala",
+  initialCommands := """
+    |import scalaParser._
+    |import syntax._
+    |import org.parboiled2._
+  """.stripMargin
 )
