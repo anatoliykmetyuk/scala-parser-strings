@@ -10,7 +10,8 @@ val root = project.in(file(".")).settings(
   autoCompilerPlugins := true,
   libraryDependencies ++= Seq(
     "com.lihaoyi" %% "utest" % "0.3.0",
-    "org.parboiled" %% "parboiled" % "2.1.0"
+    "org.parboiled" %% "parboiled" % "2.1.0",
+    "org.scalatest" %% "scalatest" % "2.2.4"
   ),
   resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
   testFrameworks += new TestFramework("utest.runner.Framework"),
@@ -35,8 +36,9 @@ val root = project.in(file(".")).settings(
         </developer>
       </developers>,
 
-  excludeFilter in unmanagedSources := "Core.scala" || "Types.scala" || "Exprs.scala" || "Scala.scala" || "Xml.scala",
-  initialCommands := """
+  excludeFilter in unmanagedSources := "Core.scala" || "Types.scala" || "Exprs.scala" || "Scala.scala" || "Xml.scala"
+ ,excludeFilter in (Test, unmanagedSources) := "ProjectTests.scala" || "UnitTests.scala"
+ ,initialCommands := """
     |import scalaParser._
     |import syntax._
     |import org.parboiled2._
