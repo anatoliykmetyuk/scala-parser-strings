@@ -8,6 +8,7 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
   // Aliases for common things. These things are used in almost every parser
   // in the file, so it makes sense to keep them short.
   type R0 = Rule0
+  type R1 = Rule1[String]
   /**
    * Parses all whitespace, excluding newlines. This is only
    * really useful in e.g. {} blocks, where we want to avoid
