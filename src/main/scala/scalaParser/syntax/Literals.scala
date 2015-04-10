@@ -3,59 +3,61 @@ package syntax
 import acyclic.file
 import org.parboiled2._
 
-trait Literals { self: Parser with Basic with Identifiers =>
-  def Block: Rule0
-  def WL: Rule0
+trait Literals { self: Parser with Basic with Identifiers with RulesOps =>
+  type R1 = Rule1[String]
+
+  def Block: R1
+  def WL: R1
   object Literals{
     import Basic._
-    def Float = {
+    def Float: R1 = {
       def Thing = rule( Digit.+ ~ Exp.? ~ FloatType.? )
       def Thing2 = rule( "." ~ Thing | Exp ~ FloatType.? | Exp.? ~ FloatType )
-      rule( "." ~ Thing | Digit.+ ~ Thing2 )
+      rule( capture("." ~ Thing | Digit.+ ~ Thing2) )
     } 
 
-    def Int = rule( (HexNum | DecNum) ~ anyOf("Ll").? )
+    def Int: R1 = rule( capture((HexNum | DecNum) ~ anyOf("Ll").?) )
 
-    def Bool = rule( Key.W("true") | Key.W("false")  )
+    def Bool: R1 = rule( capture(Key.W("true") | Key.W("false"))  )
 
-    def MultilineComment: Rule0 = rule( "/*" ~ (MultilineComment | !"*/" ~ ANY).* ~ "*/" )
-    def Comment: Rule0 = rule(
-      MultilineComment | "//" ~ (!Basic.Newline ~ ANY).* ~ &(Basic.Newline | EOI)
+    def MultilineComment: R1 = rule( capture("/*") ~ ((MultilineComment | capture(!"*/" ~ ANY)).* ~> ConcatSeqNoDelim) ~ capture("*/") ~> Concat3 )
+    def Comment: R1 = rule(
+      MultilineComment | capture("//" ~ (!Basic.Newline ~ ANY).* ~ &(Basic.Newline | EOI))
     )
-    def Null = Key.W("null")
-    def Literal = rule( ("-".? ~ (Float | Int)) | Bool | Char | String | Symbol | Null )
+    def Null: R1 = rule( capture(Key.W("null")) )
+    def Literal: R1 = rule( (capture("-".?) ~ (Float | Int) ~> Concat) | Bool | Char | String | Symbol | Null )
 
-    def EscapedChars = rule( '\\' ~ anyOf("btnfr'\\\"") )
+    def EscapedChars: R1 = rule( capture('\\' ~ anyOf("btnfr'\\\"")) )
 
     // Note that symbols can take on the same values as keywords!
-    def Symbol = rule( ''' ~ (Identifiers.PlainId | Identifiers.Keywords) )
+    def Symbol: R1 = rule( capture(''' ~ (Identifiers.PlainId | Identifiers.Keywords)) )
 
-    def Char = {
+    def Char: R1 = {
       // scalac 2.10 crashes if PrintableChar below is substituted by its body
       def PrintableChar = CharPredicate.from(isPrintableChar)
 
       rule {
-        "'" ~ (UnicodeEscape | EscapedChars | !'\\' ~ PrintableChar) ~ "'"
+        capture("'") ~ (capture(UnicodeEscape) | EscapedChars | capture(!'\\' ~ PrintableChar)) ~ capture("'") ~> Concat3
       }
     }
 
 
-    def pr(s: String) = rule( run(println(s"LOGGING $cursor: $s")) )
-    def Interp = rule{
-      "$" ~ Identifiers.PlainIdNoDollar | "${" ~ Block ~ WL ~ "}" | "$$"
+    def pr(s: String): Rule0 = rule( run(println(s"LOGGING $cursor: $s")) )
+    def Interp: R1 = rule{
+      capture("$" ~ Identifiers.PlainIdNoDollar) | capture("${") ~ Block ~ WL ~ capture("}") ~> Concat4 | capture("$$")
     }
-    def String = {
+    def String: R1 = {
       import Identifiers.Id
-      def InterpIf(b: Boolean) = if(b) rule(Interp) else rule(MISMATCH0)
-      def TQ = rule( "\"\"\"" )
-      def TripleChars(b: Boolean) = rule( (InterpIf(b) | '"'.? ~ '"'.? ~ noneOf("\"")).* )
-      def TripleTail = rule( TQ ~ zeroOrMore('"') )
-      def SingleChars(b: Boolean) = rule( (InterpIf(b) | "\\\"" | "\\\\" | noneOf("\n\"")).* )
+      def InterpIf(b: Boolean): R1 = if(b) rule(Interp) else rule(capture(MISMATCH0))
+      def TQ: Rule0 = rule( "\"\"\"" )
+      def TripleChars(b: Boolean) = rule( (InterpIf(b) | capture('"'.? ~ '"'.? ~ noneOf("\"")) ).* ~> ConcatSeqNoDelim )
+      def TripleTail: R1 = rule( capture(TQ ~ (zeroOrMore('"'))) )
+      def SingleChars(b: Boolean): R1 = rule( ( InterpIf(b) | capture("\\\"") | capture("\\\\") | capture(noneOf("\n\"")) ).* ~> ConcatSeqNoDelim )
       rule {
-        (Id ~ TQ ~ TripleChars(b = true) ~ TripleTail) |
-        (Id ~ '"' ~ SingleChars(b = true) ~ '"') |
-        (TQ ~ TripleChars(b = false) ~ TripleTail) |
-        ('"' ~ SingleChars(b = false) ~ '"')
+        (capture(Id ~ TQ ) ~ TripleChars(b = true ) ~ TripleTail   ~> Concat3) |
+        (capture(Id ~ '"') ~ SingleChars(b = true ) ~ capture('"') ~> Concat3) |
+        (capture(TQ )      ~ TripleChars(b = false) ~ TripleTail   ~> Concat3) |
+        (capture('"')      ~ SingleChars(b = false) ~ capture('"') ~> Concat3)
       }
     }
 
