@@ -33,5 +33,7 @@ val root = project.in(file(".")).settings(
           <name>Li Haoyi</name>
           <url>https://github.com/lihaoyi</url>
         </developer>
-      </developers>
+      </developers>,
+
+  excludeFilter in unmanagedSources := "Core.scala" || "Types.scala" || "Exprs.scala" || "Scala.scala" || "Xml.scala"
 )

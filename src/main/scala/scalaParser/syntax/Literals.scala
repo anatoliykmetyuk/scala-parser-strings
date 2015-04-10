@@ -65,4 +65,3 @@ trait Literals { self: Parser with Basic with Identifiers =>
     }
   }
 }
-
