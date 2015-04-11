@@ -5,9 +5,10 @@ import org.parboiled2._
 import scala.language.implicitConversions
 
 trait Xml extends Core {
-  def Patterns: Rule0
-  def XmlExpr = rule( WL ~ Xml.XmlContent ~ (WL ~ Xml.Element).* )
-  def XmlPattern = rule( WL ~ Xml.ElemPattern )
+
+  def Patterns: R1
+  def XmlExpr: R1 = rule( WL ~ Xml.XmlContent ~ ((WL ~ Xml.Element ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat3 )
+  def XmlPattern: R1 = rule( WL ~ Xml.ElemPattern ~> Concat )
 
   private[this] object Xml{
     def BaseChar = rule(
@@ -59,40 +60,39 @@ trait Xml extends Core {
       ("\u3041"-"\u3094") | ("\u30A1"-"\u30FA") | ("\u3105"-"\u312C") | ("\uAC00"-"\uD7A3")
     )
     def Ideographic = rule( "\u4E00"-"\u9FA5" | "\u3007" | "\u3021"-"\u3029" )
-    def Eq = rule (WL.? ~ '=' ~ WL.?)
+    def Eq = rule (WLR0.? ~ '=' ~ WLR0.?)
 
+    def Element: R1 = rule( EmptyElemTag | STag ~ Content ~ capture(ETag) ~> Concat3 )
 
-    def Element = rule( EmptyElemTag | STag ~ Content ~ ETag )
+    def EmptyElemTag: R1 = rule( capture('<' ~ Name) ~ ((WL ~ Attribute ~> Concat).* ~> ConcatSeqNoDelim) ~ capture(WLR0.? ~ "/>") ~> Concat3 )
 
-    def EmptyElemTag = rule( '<' ~ Name ~ (WL ~ Attribute).* ~ WL.? ~ "/>" )
-
-    def STag = rule( '<' ~ Name ~ (WL ~ Attribute).* ~ WL.? ~ '>' )
-    def ETag = rule( "</" ~ Name ~ WL.? ~ '>' )
-    def Content = rule( (CharData | Content1).* )
-    def Content1  = rule( XmlContent | Reference | ScalaExpr )
-    def XmlContent: Rule0 = rule( Element | CDSect | PI | Comment )
+    def STag: R1 = rule( capture('<' ~ Name) ~ ((WL ~ Attribute ~> Concat).* ~> ConcatSeqNoDelim) ~ capture(WLR0.? ~ '>') ~> Concat3 )
+    def ETag = rule( "</" ~ Name ~ WLR0.? ~ '>' )
+    def Content: R1 = rule( (capture(CharData) | Content1).* ~> ConcatSeqNoDelim )
+    def Content1: R1  = rule( XmlContent | capture(Reference) | ScalaExpr )
+    def XmlContent: R1 = rule( Element | capture(CDSect) | capture(PI) | capture(Comment) )
 
     def CDSect = rule( CDStart ~ CData ~ CDEnd )
     def CDStart = rule( "<![CDATA[" )
     def CData = rule( (!"]]>" ~ Char).* )
     def CDEnd = rule( "]]>" )
 
-    def Attribute = rule( Name ~ Eq ~ AttValue )
+    def Attribute: R1 = rule( capture(Name ~ Eq) ~ AttValue ~> Concat )
 
-    def AttValue = rule(
-      '"' ~ (CharQ | Reference).* ~ '"' |
-      "'" ~ (CharA | Reference).* ~ "'" |
+    def AttValue: R1 = rule(
+      capture('"' ~ (CharQ | Reference).* ~ '"') |
+      capture("'" ~ (CharA | Reference).* ~ "'") |
       ScalaExpr
     )
 
     def Comment = rule( "<!--" ~ ((!'-' ~ Char) | ('-' ~ (!'-' ~ Char))).* ~ "-->" )
 
-    def PI = rule( "<?" ~ PITarget ~ (WL ~ (!"?>" ~ Char).*).? ~ "?>" )
+    def PI = rule( "<?" ~ PITarget ~ (WLR0 ~ (!"?>" ~ Char).*).? ~ "?>" )
     def PITarget = rule( !(("X" | "x") ~ ("M" | "m") ~ ("L" | "l")) ~ Name )
     def CharRef = rule( "&#" ~ ("0"-"9").+ ~ ';' | "&#x" ~ Basic.HexNum ~ ";" )
     def Reference = rule( EntityRef | CharRef )
     def EntityRef = rule( "&" ~ Name ~ ";" )
-    def ScalaExpr = rule("{" ~ WS ~ Block ~ WS ~ "}")
+    def ScalaExpr: R1 = rule(capture("{") ~ WS ~ Block ~ WS ~ capture("}") ~> Concat5)
     def Char = rule( ANY )
     def CharData = rule( (!("{" | "]]>" | CharRef) ~ Char1 | "{{").+ )
 
@@ -110,12 +110,12 @@ trait Xml extends Core {
       ("\uFDF0"-"\uFFFD") )// | [#x10000-#xEFFFF] ???? don't chars max out at \uffff ????
 
     def NameChar = rule( NameStartChar | "-" | "." | ("0"-"9") | "\u00B7" | ("\u0300"-"\u036F") | ("\u203F"-"\u2040") )
-    def ElemPattern: Rule0 = rule( EmptyElemTagP | STagP ~ ContentP ~ ETagP )
-    def EmptyElemTagP = rule( "<" ~ Name ~ WL.? ~ "/>" )
-    def STagP = rule( "<" ~ Name ~ WL.? ~ ">")
-    def ETagP = rule( "</" ~ Name ~ WL.? ~ ">" )
-    def ContentP = rule( CharData.? ~ ((ElemPattern | ScalaPatterns) ~ CharData.?).* )
-    def ContentP1 = rule( ElemPattern | Reference | CDSect | PI | Comment | ScalaPatterns )
-    def ScalaPatterns = rule( "{" ~ Patterns ~ WL ~ "}" )
+    def ElemPattern: R1 = rule( capture(EmptyElemTagP) | capture(STagP) ~ ContentP ~ capture(ETagP) ~> Concat3 )
+    def EmptyElemTagP = rule( "<" ~ Name ~ WLR0.? ~ "/>" )
+    def STagP = rule( "<" ~ Name ~ WLR0.? ~ ">")
+    def ETagP = rule( "</" ~ Name ~ WLR0.? ~ ">" )
+    def ContentP: R1 = rule( capture(CharData.?) ~ (((ElemPattern | ScalaPatterns) ~ capture(CharData.?) ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    def ContentP1: R1 = rule( ElemPattern | capture(Reference) | capture(CDSect) | capture(PI) | capture(Comment) | ScalaPatterns )
+    def ScalaPatterns: R1 = rule( capture("{") ~ Patterns ~ WL ~ capture("}") ~> Concat4 )
   }
 }

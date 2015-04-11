@@ -36,7 +36,7 @@ val root = project.in(file(".")).settings(
         </developer>
       </developers>,
 
-  excludeFilter in unmanagedSources := "Exprs.scala" || "Scala.scala" || "Xml.scala"
+  excludeFilter in unmanagedSources := "Exprs.scala" || "Scala.scala"
  ,excludeFilter in (Test, unmanagedSources) := "ProjectTests.scala" || "UnitTests.scala"
  ,initialCommands := """
     |import scalaParser._
