@@ -29,14 +29,14 @@ trait Types extends Core{
     rule( Unbounded ~ TypeBounds ~> Concat )
   }
 
-  def InfixType: R1 = rule( CompoundType ~ ((NotNewline ~ Id ~ OneNLMax ~ CompoundType ~> Concat3).* ~> ConcatSeqNoDelim) ~> Concat )
+  def InfixType: R1 = rule( CompoundType ~ ((NotNewline ~ Id ~ OneNLMax ~ CompoundType ~> Concat4).* ~> ConcatSeqNoDelim) ~> Concat )
 
   def CompoundType: R1 = {
     def RefineStat: R1 = rule( TypeDef | Dcl  )
     def Refinement: R1 = rule( OneNLMax ~ `{` ~ (RefineStat.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat4 )
     rule( (AnnotType.+(`withR0`) ~> ConcatSeqWith) ~ (Refinement.? ~> ExtractOpt) ~> Concat | Refinement )
   }
-  def AnnotType: R1 = rule(SimpleType ~ ((NotNewline ~ (NotNewline ~ Annot).+ ~> ConcatSeqNoDelim).? ~> ExtractOpt) ~> Concat )
+  def AnnotType: R1 = rule(SimpleType ~ ((NotNewline ~ ((NotNewline ~ Annot ~> Concat).+ ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt) ~> Concat )
 
   def SimpleType: R1 = {
     def BasicType: R1 = rule( '(' ~ Types ~ ')' ~> Concat3 | StableId ~ '.' ~ `type` ~> Concat3 | StableId )

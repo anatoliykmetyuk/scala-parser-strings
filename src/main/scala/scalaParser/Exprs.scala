@@ -6,122 +6,125 @@ import acyclic.file
  */
 trait Exprs extends Core with Types with Xml{
 
-  private implicit def wspStr(s: String) = rule( WL ~ str(s) )
-  private implicit def wspCh(s: Char) = rule( WL ~ ch(s) )
+  private implicit def wspStr(s: String): R1 = rule( WL ~ capture(str(s)) ~> Concat )
+  private implicit def wspCh (s: Char  ): R1 = rule( WL ~ capture(ch (s)) ~> Concat )
 
-  def NewBody: R0
-  def BlockDef: R0
+  def NewBody : R1
+  def BlockDef: R1
 
-  def Import: R0 = {
-    def ImportExpr: R0 = rule( StableId ~ ('.' ~ (`_` | Selectors)).? )
-    def Selectors: R0 = rule( '{' ~ (Selector ~ ',').* ~ (Selector | `_`) ~ "}" )
-    def Selector: R0 = rule( Id ~ (`=>` ~ (Id | `_`)).? )
-    rule( `import` ~ ImportExpr.+(',') )
+  def Import: R1 = {
+    def ImportExpr: R1 = rule( StableId ~ (('.' ~ (`_` | Selectors) ~> Concat).? ~> ExtractOpt) ~> Concat )
+    def Selectors: R1 = rule( '{' ~ ((Selector ~ ',' ~> Concat).* ~> ConcatSeqNoDelim) ~ (Selector | `_`) ~ "}" ~> Concat4 )
+    def Selector: R1 = rule( Id ~ ((`=>` ~ (Id | `_`) ~> Concat).? ~> ExtractOpt) ~> Concat )
+    // !!! ',' can't be implicitly converted to have WL behind it, since it is R1.
+    rule( `import` ~ (ImportExpr.+(',') ~> ConcatSeqComma) ~> Concat )
   }
 
-  def Ascription = rule( `:` ~ (`_*` |  Type | Annot.+) )
+  def Ascription: R1 = rule( `:` ~ (`_*` |  Type | Annot.+ ~> ConcatSeqNoDelim) ~> Concat )
 
-  def LambdaHead: R0 = {
-    def Binding = rule( (Id | `_`) ~ (`:` ~ Type).? )
-    def Bindings = rule( '(' ~ Binding.*(',') ~ ')' )
-    def Implicit = rule( `implicit`.? ~ Id ~ (`:` ~ InfixType).? )
-    rule( (Bindings | Implicit | `_` ~ Ascription.?) ~ `=>` )
+  def LambdaHead: R1 = {
+    def Binding: R1 = rule( (Id | `_`) ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~> Concat )
+    def Bindings: R1 = rule( '(' ~ (Binding.*(',') ~> ConcatSeqComma) ~ ')' ~> Concat3 )
+    def Implicit: R1 = rule( `implicit`.? ~> ExtractOpt ~ Id ~ ((`:` ~ InfixType ~> Concat).? ~> ExtractOpt) ~> Concat3 )
+    rule( (Bindings | Implicit | `_` ~ (Ascription.? ~> ExtractOpt) ~> Concat) ~ `=>` ~> Concat )
   }
   object StatCtx extends WsCtx(true)
   object ExprCtx extends WsCtx(false)
-  def TypeExpr = ExprCtx.Expr
+  def TypeExpr: R1 = ExprCtx.Expr
   class WsCtx(injectSemicolons: Boolean){
 
-    def OneSemiMax = if (injectSemicolons) OneNLMax else MATCH
-    def NoSemis = if (injectSemicolons) NotNewline else MATCH
+    def OneSemiMax: R1 = if (injectSemicolons) OneNLMax   else rule {capture(MATCH)}
+    def NoSemis   : R1 = if (injectSemicolons) NotNewline else rule {capture(MATCH)}
 
-    def Enumerators = {
-      def Generator = rule( Pat1 ~ `<-` ~ Expr ~ Guard.? )
-      def Assign = rule( Pat1 ~ `=` ~ Expr )
-      def Enumerator = rule( Semis ~ Generator | optional(Semis) ~ Guard | Semis ~ Assign )
-      rule( Generator ~ Enumerator.* ~ WL )
+    def Enumerators: R1 = {
+      def Generator: R1 = rule( Pat1 ~ `<-` ~ Expr ~ (Guard.? ~> ExtractOpt) ~> Concat4 )
+      def Assign: R1 = rule( Pat1 ~ `=` ~ Expr ~> Concat3 )
+      def Enumerator: R1 = rule( Semis ~ Generator ~> Concat | optional(Semis) ~> ExtractOpt ~ Guard ~> Concat | Semis ~ Assign ~> Concat )
+      rule( Generator ~ (Enumerator.* ~> ConcatSeqNoDelim) ~ WL ~> Concat3 )
     }
-    def Expr: R0 = {
-      def If = {
-        def Else = rule( Semi.? ~ `else` ~ Expr )
-        rule( `if` ~ '(' ~ ExprCtx.Expr ~ ')' ~ Expr ~ Else.? )
+    def Expr: R1 = {
+      def If: R1 = {
+        def Else: R1 = rule( Semi.? ~> ExtractOpt ~ `else` ~ Expr ~> Concat3 )
+        rule( `if` ~ '(' ~ ExprCtx.Expr ~ ')' ~ Expr ~ (Else.? ~> ExtractOpt) ~> Concat6 )
       }
-      def While = rule( `while` ~ '(' ~ Expr ~ ')' ~ Expr )
-      def Try = {
-        def Catch = rule( `catch` ~ Expr )
-        def Finally = rule( `finally` ~ Expr )
-        rule( `try` ~ Expr ~ Catch.? ~ Finally.? )
+      def While: R1 = rule( `while` ~ '(' ~ Expr ~ ')' ~ Expr ~> Concat5 )
+      def Try: R1 = {
+        def Catch: R1 = rule( `catch` ~ Expr ~> Concat )
+        def Finally: R1 = rule( `finally` ~ Expr ~> Concat )
+        rule( `try` ~ Expr ~ (Catch.? ~> ExtractOpt) ~ (Finally.? ~> ExtractOpt) ~> Concat4 )
       }
-      def DoWhile = rule( `do` ~ Expr ~ Semi.? ~ `while` ~ '(' ~ Expr ~ ")" )
+      def DoWhile: R1 = rule( `do` ~ Expr ~ (Semi.? ~> ExtractOpt) ~ `while` ~ '(' ~ Expr ~ ")" ~> Concat7 )
 
-      def For = {
-        def Body = rule( '(' ~ ExprCtx.Enumerators ~ ')' | '{' ~ StatCtx.Enumerators ~ '}' )
-        rule( `for` ~ Body ~ `yield`.? ~ Expr )
+      def For: R1 = {
+        def Body: R1 = rule( '(' ~ ExprCtx.Enumerators ~ ')' ~> Concat3 | '{' ~ StatCtx.Enumerators ~ '}' ~> Concat3 )
+        rule( `for` ~ Body ~ (`yield`.? ~> ExtractOpt) ~ Expr ~> Concat4 )
       }
-      def Throw = rule( `throw` ~ Expr )
-      def Return = rule( `return` ~ Expr.? )
+      def Throw: R1 = rule( `throw` ~ Expr ~> Concat )
+      def Return: R1 = rule( `return` ~ (Expr.? ~> ExtractOpt) ~> Concat )
 
-      def SmallerExpr = rule( PostfixExpr ~ (`match` ~ '{' ~ CaseClauses ~ "}" | Ascription).? )
-      def LambdaBody = rule( If | While | Try | DoWhile | For | Throw | Return | SmallerExpr )
-      rule( LambdaHead.* ~ LambdaBody )
+      def SmallerExpr: R1 = rule( PostfixExpr ~ ((`match` ~ '{' ~ CaseClauses ~ "}" ~> Concat4 | Ascription).? ~> ExtractOpt) ~> Concat )
+      def LambdaBody: R1 = rule( If | While | Try | DoWhile | For | Throw | Return | SmallerExpr )
+      rule( LambdaHead.* ~> ConcatSeqNoDelim ~ LambdaBody ~> Concat )
     }
 
-    def PostfixExpr: R0 = {
-      def Prefixed = rule( (WL ~ anyOf("-+~!") ~ WS ~ !Basic.OpChar) ~  SimpleExpr )
-      def Assign = rule( SimpleExpr ~ (`=` ~ Expr).? )
-      def PrefixExpr = rule( Prefixed | Assign )
+    def PostfixExpr: R1 = {
+      // ! negation !!!
+      def Prefixed: R1 = rule( (WL ~ capture(anyOf("-+~!")) ~ WS ~ !Basic.OpChar ~> Concat3) ~  SimpleExpr ~> Concat )
+      def Assign: R1 = rule( SimpleExpr ~ ((`=` ~ Expr ~> Concat).? ~> ExtractOpt) ~> Concat )
+      def PrefixExpr: R1 = rule( Prefixed | Assign )
 
-      def InfixExpr = rule( PrefixExpr ~ (NoSemis ~ Id ~ TypeArgs.? ~ OneSemiMax ~ PrefixExpr).* )
-      rule( InfixExpr ~ (NotNewline ~ Id ~ Newline.?).? )
+      def InfixExpr: R1 = rule( PrefixExpr ~ ((NoSemis ~ Id ~ (TypeArgs.? ~> ExtractOpt) ~ OneSemiMax ~ PrefixExpr ~> Concat5).* ~> ConcatSeqNoDelim) ~> Concat )
+      rule( InfixExpr ~ ((NotNewline ~ Id ~ (Newline.? ~> ExtractOpt) ~> Concat3).? ~> ExtractOpt) ~> Concat )
     }
 
-    def SimpleExpr: R0 = {
-      def Path = rule( (Id ~ '.').* ~ `this` ~ ('.' ~ Id).* | StableId )
-      def New = rule( `new` ~ NewBody )
-      def Parened = rule ( '(' ~ Exprs.? ~ ")"  )
-      def SimpleExpr1 = rule( XmlExpr | New | BlockExpr | Literal | Path | `_` | Parened)
-      rule( SimpleExpr1 ~ ('.' ~ Id | TypeArgs | NoSemis ~ ArgList).* ~ (NoSemis  ~ `_`).?)
+    def SimpleExpr: R1 = {
+      def Path: R1 = rule( (Id ~ '.' ~> Concat).* ~> ConcatSeqNoDelim ~ `this` ~ (('.' ~ Id ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat3 | StableId )
+      def New: R1 = rule( `new` ~ NewBody ~> Concat )
+      def Parened: R1 = rule ( '(' ~ (Exprs.? ~> ExtractOpt) ~ ")" ~> Concat3  )
+      def SimpleExpr1: R1 = rule( XmlExpr | New | BlockExpr | Literal | Path | `_` | Parened)
+      rule( SimpleExpr1 ~ (('.' ~ Id ~> Concat | TypeArgs | NoSemis ~ ArgList ~> Concat).* ~> ConcatSeqNoDelim) ~ ((NoSemis  ~ `_` ~> Concat).? ~> ExtractOpt) ~> Concat3)
     }
-    def Guard : R0 = rule( `if` ~ PostfixExpr )
+    def Guard : R1 = rule( `if` ~ PostfixExpr ~> Concat )
   }
-  def SimplePat: R0 = {
-    def ExtractorArgs = rule( Pat.*(',') )
-    def Extractor = rule( StableId ~ ('(' ~ ExtractorArgs ~ ')').? )
-    def TupleEx = rule( '(' ~ ExtractorArgs.? ~ ')' )
-    def Thingy = rule( `_` ~ (`:` ~ TypePat).? ~ !"*" )
+  def SimplePat: R1 = {
+    def ExtractorArgs: R1 = rule( Pat.*(',') ~> ConcatSeqComma )
+    def Extractor: R1 = rule( StableId ~ (('(' ~ ExtractorArgs ~ ')' ~> Concat3).? ~> ExtractOpt) ~> Concat )
+    def TupleEx: R1 = rule( '(' ~ (ExtractorArgs.? ~> ExtractOpt) ~ ')' ~> Concat3 )
+    def Thingy: R1 = rule( `_` ~ ((`:` ~ TypePat ~> Concat).? ~> ExtractOpt) ~ !"*" ~> Concat )  // !"*" doesn't have an effect anyway, hence Concat and not Concat3
     rule( XmlPattern | Thingy | Literal | TupleEx | Extractor | VarId)
   }
 
-  def BlockExpr: R0 = rule( '{' ~ (CaseClauses | Block) ~ `}` )
+  def BlockExpr: R1 = rule( '{' ~ (CaseClauses | Block) ~ `}` ~> Concat3 )
 
-  def BlockStats: R0 = {
-    def Prelude = rule( Annot.* ~ `implicit`.? ~ `lazy`.? ~ LocalMod.* )
-    def Tmpl = rule( Prelude ~ BlockDef )
-    def BlockStat = rule( Import | Tmpl | StatCtx.Expr )
-    rule( BlockStat.+(Semis) )
+  def BlockStats: R1 = {
+    def Prelude: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ (`implicit`.? ~> ExtractOpt) ~ (`lazy`.? ~> ExtractOpt) ~ (LocalMod.* ~> ConcatSeqNoDelim) ~> Concat4 )
+    def Tmpl: R1 = rule( Prelude ~ BlockDef ~> Concat )
+    def BlockStat: R1 = rule( Import | Tmpl | StatCtx.Expr )
+    rule( BlockStat.+(SemisR0) ~> ConcatSeqSemi )
   }
 
-  def Block: R0 = {
-    def End = rule( Semis.? ~ &("}" | `case`) )
-    def ResultExpr = rule{ StatCtx.Expr | LambdaHead ~ Block}
-    def Body = rule( ResultExpr ~ End | BlockStats ~ (Semis ~ ResultExpr).? ~ End | End )
-    rule( LambdaHead.* ~ Semis.? ~ Body )
+  def Block: R1 = {
+    def End: R1 = rule( Semis.? ~> ExtractOpt ~ &("}" | `case`) )
+    def ResultExpr: R1 = rule{ StatCtx.Expr | LambdaHead ~ Block ~> Concat}
+    def Body: R1 = rule( ResultExpr ~ End ~> Concat | BlockStats ~ ((Semis ~ ResultExpr ~> Concat).? ~> ExtractOpt) ~ End ~> Concat3 | End )
+    rule( LambdaHead.* ~> ConcatSeqNoDelim ~ (Semis.? ~> ExtractOpt) ~ Body ~> Concat3 )
   }
 
-  def Patterns: R0 = rule( Pat.+(",") )
-  def Pat: R0 = rule( Pat1.+('|') )
-  def Pat1: R0 = rule( `_` ~ `:` ~ TypePat | VarId ~ `:` ~ TypePat | Pat2 )
-  def Pat2: R0 = {
-    def Pat3 = rule( `_*` | SimplePat ~ (Id ~ SimplePat).* )
-    rule( (VarId | `_`) ~ `@` ~ Pat3 | Pat3 | VarId )
+  def Patterns: R1 = rule( Pat.+(",") ~> ConcatSeqComma )
+  // !!! Problems might arise with pipe: whitespace before it is not likely to be permitted. In the real world, it is always almost present.
+  def Pat : R1 = rule( Pat1.+('|') ~> ConcatSeqPipe )
+  def Pat1: R1 = rule( `_` ~ `:` ~ TypePat ~> Concat3 | VarId ~ `:` ~ TypePat ~> Concat3 | Pat2 )
+  def Pat2: R1 = {
+    def Pat3 = rule( `_*` | SimplePat ~ ((Id ~ SimplePat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( (VarId | `_`) ~ `@` ~ Pat3 ~> Concat3 | Pat3 | VarId )
   }
 
-  def TypePat = rule( CompoundType )
+  def TypePat: R1 = rule( CompoundType )
 
-  def ArgList: R0 = rule( '(' ~ (Exprs ~ (`:` ~ `_*`).?).? ~ ")" | OneNLMax ~ BlockExpr )
+  def ArgList: R1 = rule( '(' ~ ((Exprs ~ ((`:` ~ `_*` ~> Concat).? ~> ExtractOpt) ~> Concat).? ~> ExtractOpt) ~ ")" ~> Concat3 | OneNLMax ~ BlockExpr ~> Concat )
 
-  def CaseClauses: R0 = {
-    def CaseClause: R0 = rule( `case` ~ Pat ~ ExprCtx.Guard.? ~ `=>` ~ Block )
-    rule( CaseClause.+ )
+  def CaseClauses: R1 = {
+    def CaseClause: R1 = rule( `case` ~ Pat ~ (ExprCtx.Guard.? ~> ExtractOpt) ~ `=>` ~ Block ~> Concat5 )
+    rule( CaseClause.+ ~> ConcatSeqNoDelim )
   }
 }

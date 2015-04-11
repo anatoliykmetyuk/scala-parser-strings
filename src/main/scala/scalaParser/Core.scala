@@ -122,11 +122,11 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
   def QualId: R1 = rule( WL ~ (Id.+('.') ~> ConcatSeqDot)~> Concat )
   def Ids   : R1 = rule( Id.+(',') ~> ConcatSeqDot )
 
-  def NotNewline: R0 = rule( &( WS ~ !Basic.Newline ) )
+  def NotNewline: R1 = rule( capture(&( WS ~ !Basic.Newline )) )
   def OneNLMax: R1 = {
     def WSChar: R1 = rule( capture(Basic.WSChar.*) )
     def ConsumeComments: R1 = rule( (WSChar ~ Literals.Comment ~ WSChar ~ capture(Basic.Newline) ~> Concat4).* ~> ConcatSeqNoDelim )
-    rule( WS ~ capture(Basic.Newline.?) ~ ConsumeComments ~ NotNewline ~> Concat3 )
+    rule( WS ~ capture(Basic.Newline.?) ~ ConsumeComments ~ NotNewline ~> Concat4 )
   }
   def StableId: R1 = {
     def ClassQualifier: R1 = rule( '[' ~ Id ~ ']' ~> Concat3 )

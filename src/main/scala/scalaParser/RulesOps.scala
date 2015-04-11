@@ -8,6 +8,7 @@ trait RulesOps {
   def Concat3: (S, S, S)             => S = _+_+_
   def Concat4: (S, S, S, S)          => S = _+_+_+_
   def Concat5: (S, S, S, S, S)       => S = _+_+_+_+_
+  def Concat6: (S, S, S, S, S, S)    => S = _+_+_+_+_+_
   def Concat7: (S, S, S, S, S, S, S) => S = _+_+_+_+_+_+_
 
   def ConcatSeq(delimiter: String): (Seq[String]) => String = _.mkString(delimiter)
@@ -17,6 +18,7 @@ trait RulesOps {
   def ConcatSeqComma   = ConcatSeq(",")
   def ConcatSeqDot     = ConcatSeq(".")
   def ConcatSeqWith    = ConcatSeq(" with ")
+  def ConcatSeqPipe    = ConcatSeq("|")
 
   def ExtractOpt: Option[String] => String = _.getOrElse("")
 
