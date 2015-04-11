@@ -10,74 +10,75 @@ import org.parboiled2._
 class Scala (val input: ParserInput)
   extends Core with Types with Exprs with Xml{
 
-  private implicit def wspStr(s: String) = rule( WL ~ str(s) )
-  private implicit def wspCh(s: Char) = rule( WL ~ ch(s) )
+  private implicit def wspStr(s: String): R1 = rule( WL ~ capture(str(s)) ~> Concat )
+  private implicit def wspCh (s: Char  ): R1 = rule( WL ~ capture(ch (s)) ~> Concat )
 
-  def TmplBody: R0 = {
-    def Prelude = rule( (Annot ~ OneNLMax).* ~ Mod.* )
-    def TmplStat = rule( Import | Prelude ~ (BlockDef | Dcl) | StatCtx.Expr )
-    def SelfType = rule( (`this` | Id | `_`) ~ (`:` ~ InfixType).? ~ `=>` )
-    rule( '{' ~ SelfType.? ~ Semis.? ~ TmplStat.*(Semis) ~ `}` )
+  def TmplBody: R1 = {
+    def Prelude : R1 = rule( (Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim ~ (Mod.* ~> ConcatSeqNoDelim) ~> Concat )
+    def TmplStat: R1 = rule( Import | Prelude ~ (BlockDef | Dcl) ~> Concat | StatCtx.Expr )
+    def SelfType: R1 = rule( (`this` | Id | `_`) ~ ((`:` ~ InfixType ~> Concat).? ~> ExtractOpt) ~ `=>` ~> Concat3 )
+    rule( '{' ~ (SelfType.? ~> ExtractOpt) ~ (Semis.? ~> ExtractOpt) ~ (TmplStat.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat5 )
   }
 
-  def NewBody = rule( ClsTmpl | TmplBody )
+  def NewBody: R1 = rule( ClsTmpl | TmplBody )
 
-  def ValRhs = rule( Pat2.+(',') ~ (`:` ~ Type).? ~ `=` ~ StatCtx.Expr )
-  def ValDef = rule( `val` ~ ValRhs )
-  def VarDef = rule( `var` ~ Ids ~ `:` ~ Type ~ `=` ~ `_` | `var` ~ ValRhs )
+  def ValRhs: R1 = rule( Pat2.+(',') ~> ConcatSeqComma ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~ `=` ~ StatCtx.Expr ~> Concat4 )
+  def ValDef: R1 = rule( `val` ~ ValRhs ~> Concat )
+  def VarDef: R1 = rule( `var` ~ Ids ~ `:` ~ Type ~ `=` ~ `_` ~> Concat6 | `var` ~ ValRhs ~> Concat )
 
-  def DefDef = {
-    def Body = rule( `=` ~ `macro`.? ~ StatCtx.Expr | OneNLMax ~ '{' ~ Block ~ "}" )
-    rule( `def` ~ FunSig ~ (`:` ~ Type).? ~ Body )
+  def DefDef: R1 = {
+    def Body: R1 = rule( `=` ~ (`macro`.? ~> ExtractOpt) ~ StatCtx.Expr ~> Concat3 | OneNLMax ~ '{' ~ Block ~ "}" ~> Concat4 )
+    rule( `def` ~ FunSig ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~ Body ~> Concat4 )
   }
 
-  def BlockDef: R0 = rule( DefDef | TypeDef | ValDef | VarDef | TraitDef | ClsDef | ObjDef )
+  def BlockDef: R1 = rule( DefDef | TypeDef | ValDef | VarDef | TraitDef | ClsDef | ObjDef )
 
-  def ClsDef = {
-    def ClsAnnot = rule( `@` ~ SimpleType ~ ArgList )
-    def Prelude = rule( NotNewline ~ ( ClsAnnot.+ ~ AccessMod.? | ClsAnnot.* ~ AccessMod) )
-    def ClsArgMod = rule( (Mod.* ~ (`val` | `var`)).? )
-    def ClsArg = rule( Annot.* ~ ClsArgMod ~ Id ~ `:` ~ ParamType ~ (`=` ~ ExprCtx.Expr).? )
+  def ClsDef: R1 = {
+    def ClsAnnot: R1 = rule( `@` ~ SimpleType ~ ArgList ~> Concat3 )
+    def Prelude: R1 = rule( NotNewline ~ ( ClsAnnot.+ ~> ConcatSeqNoDelim ~ (AccessMod.? ~> ExtractOpt) ~> Concat | ClsAnnot.* ~> ConcatSeqNoDelim ~ AccessMod ~> Concat) ~> Concat )
+    def ClsArgMod: R1 = rule( (Mod.* ~> ConcatSeqNoDelim ~ (`val` | `var`) ~> Concat).? ~> ExtractOpt )
+    def ClsArg: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ ClsArgMod ~ Id ~ `:` ~ ParamType ~ ((`=` ~ ExprCtx.Expr ~> Concat).? ~> ExtractOpt) ~> Concat6 )
 
-    def Implicit = rule( OneNLMax ~ '(' ~ `implicit` ~ ClsArg.+(",") ~ ")" )
-    def ClsArgs = rule( OneNLMax ~'(' ~ ClsArg.*(',') ~ ")" )
-    def AllArgs = rule( ClsArgs.+ ~ Implicit.? | Implicit )
-    rule( `case`.? ~ `class` ~ Id ~ TypeArgList.? ~ Prelude.? ~ AllArgs.? ~ ClsTmplOpt )
+    // Comma-separated, ponentially without spaces!!!
+    def Implicit: R1 = rule( OneNLMax ~ '(' ~ `implicit` ~ (ClsArg.+(",") ~> ConcatSeqComma) ~ ")" ~> Concat5 )
+    def ClsArgs: R1 = rule( OneNLMax ~'(' ~ (ClsArg.*(',') ~> ConcatSeqComma) ~ ")" ~> Concat4 )
+    def AllArgs: R1 = rule( ClsArgs.+ ~> ConcatSeqNoDelim ~ (Implicit.? ~> ExtractOpt) ~> Concat | Implicit )
+    rule( `case`.? ~> ExtractOpt ~ `class` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ (Prelude.? ~> ExtractOpt) ~ (AllArgs.? ~> ExtractOpt) ~ ClsTmplOpt ~> Concat7 )
   }
-  def TraitDef = {
-    def TraitTmplOpt = {
-      def TraitParents = rule( AnnotType ~ (`with` ~ AnnotType).* )
-      def TraitTmpl = rule( EarlyDefs.? ~ TraitParents ~ TmplBody.? )
-      rule( `extends` ~ TraitTmpl | (`extends`.? ~ TmplBody).? )
+  def TraitDef: R1 = {
+    def TraitTmplOpt: R1 = {
+      def TraitParents: R1 = rule( AnnotType ~ ((`with` ~ AnnotType ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+      def TraitTmpl: R1 = rule( EarlyDefs.? ~> ExtractOpt ~ TraitParents ~ (TmplBody.? ~> ExtractOpt) ~> Concat3 )
+      rule( `extends` ~ TraitTmpl ~> Concat | (`extends`.? ~> ExtractOpt ~ TmplBody ~> Concat).? ~> ExtractOpt )
     }
-    rule( `trait` ~ Id ~ TypeArgList.? ~ TraitTmplOpt )
+    rule( `trait` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ TraitTmplOpt ~> Concat4 )
   }
 
-  def ObjDef: R0 = rule( `case`.? ~ `object` ~ Id ~ ClsTmplOpt )
-  def ClsTmplOpt: R0 = rule( `extends` ~ ClsTmpl | (`extends`.? ~ TmplBody).? )
+  def ObjDef: R1 = rule( `case`.? ~> ExtractOpt ~ `object` ~ Id ~ ClsTmplOpt ~> Concat4 )
+  def ClsTmplOpt: R1 = rule( `extends` ~ ClsTmpl ~> Concat | (`extends`.? ~> ExtractOpt ~ TmplBody ~> Concat).? ~> ExtractOpt )
 
-  def ClsTmpl: R0 = {
-    def Constr = rule( AnnotType ~ (NotNewline ~ ArgList).* )
-    def ClsParents = rule( Constr ~ (`with` ~ AnnotType).* )
-    rule( EarlyDefs.? ~ ClsParents ~ TmplBody.? )
+  def ClsTmpl: R1 = {
+    def Constr = rule( AnnotType ~ ((NotNewline ~ ArgList ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    def ClsParents = rule( Constr ~ ((`with` ~ AnnotType ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( (EarlyDefs.? ~> ExtractOpt) ~ ClsParents ~ (TmplBody.? ~> ExtractOpt) ~> Concat3 )
   }
 
-  def EarlyDefs: R0 = {
-    def EarlyDef = rule( (Annot ~ OneNLMax).* ~ Mod.* ~ (ValDef | VarDef) )
-    rule( `{` ~ EarlyDef.*(Semis) ~ `}` ~ `with` )
+  def EarlyDefs: R1 = {
+    def EarlyDef: R1 = rule( ((Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim) ~ (Mod.* ~> ConcatSeqNoDelim) ~ (ValDef | VarDef) ~> Concat3 )
+    rule( `{` ~ (EarlyDef.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~ `with` ~> Concat4 )
   }
 
-  def PkgObj = rule( `package` ~ ObjDef )
-  def PkgBlock = rule( `package` ~ QualId ~ `{` ~ TopStatSeq.? ~ `}` )
-  def TopStatSeq: R0 = {
-    def Tmpl = rule( (Annot ~ OneNLMax).* ~ Mod.* ~ (TraitDef | ClsDef | ObjDef) )
-    def TopStat = rule( PkgBlock | PkgObj | Import | Tmpl )
-    rule( TopStat.+(Semis) )
+  def PkgObj: R1 = rule( `package` ~ ObjDef ~> Concat )
+  def PkgBlock: R1 = rule( `package` ~ QualId ~ `{` ~ (TopStatSeq.? ~> ExtractOpt) ~ `}` ~> Concat5 )
+  def TopStatSeq: R1 = {
+    def Tmpl: R1 = rule( ((Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim) ~ (Mod.* ~> ConcatSeqNoDelim) ~ (TraitDef | ClsDef | ObjDef) ~> Concat3 )
+    def TopStat: R1 = rule( PkgBlock | PkgObj | Import | Tmpl )
+    rule( TopStat.+(SemisR0) ~> ConcatSeqSemi )
   }
 
-  def CompilationUnit: Rule1[String] = {
-    def TopPackageSeq = rule( (`package` ~ QualId ~ !(WS ~ "{")).+(Semis) )
-    def Body = rule( TopPackageSeq ~ (Semis ~ TopStatSeq).? | TopStatSeq | MATCH )
-    rule( capture(Semis.? ~ Body ~ Semis.? ~ WL) )
+  def CompilationUnit: R1 = {
+    def TopPackageSeq: R1 = rule( (`package` ~ QualId ~ !(WS ~ "{") ~> Concat).+(SemisR0) ~> ConcatSeqSemi )
+    def Body: R1 = rule( TopPackageSeq ~ ((Semis ~ TopStatSeq ~> Concat).? ~> ExtractOpt) ~> Concat | TopStatSeq | capture(MATCH) )
+    rule( Semis.? ~> ExtractOpt ~ Body ~ (Semis.? ~> ExtractOpt) ~ WL ~> Concat4 )
   }
 }

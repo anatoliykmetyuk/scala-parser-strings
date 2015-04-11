@@ -34,9 +34,9 @@ val root = project.in(file(".")).settings(
           <name>Li Haoyi</name>
           <url>https://github.com/lihaoyi</url>
         </developer>
-      </developers>,
+      </developers>
 
-  excludeFilter in unmanagedSources := "Scala.scala"
+  // ,excludeFilter in unmanagedSources := "Scala.scala"
  ,excludeFilter in (Test, unmanagedSources) := "ProjectTests.scala" || "UnitTests.scala"
  ,initialCommands := """
     |import scalaParser._
