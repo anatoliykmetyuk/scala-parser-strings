@@ -2,75 +2,79 @@ package scalaParser
 
 trait Types extends Core{
 
-  def TypeExpr: R0
+  def TypeExpr: R1
 
-  private implicit def wspStr(s: String) = rule( WL ~ str(s) )
-  private implicit def wspCh(s: Char) = rule( WL ~ ch(s) )
+  private implicit def wspStr(s: String): R1 = rule( WL ~ capture(str(s)) ~> Concat )
+  private implicit def wspCh (s: Char  ): R1 = rule( WL ~ capture(ch (s)) ~> Concat )
 
-  def Mod: R0 = rule( LocalMod | AccessMod | `override` )
-  def LocalMod: R0 = rule( `abstract` | `final` | `sealed` | `implicit` | `lazy` )
-  def AccessMod: R0 = {
-    def AccessQualifier = rule( '[' ~ (`this` | Id) ~ ']' )
-    rule( (`private` | `protected`) ~ AccessQualifier.? )
+  def Mod: R1 = rule( LocalMod | AccessMod | `override` )
+  def LocalMod: R1 = rule( `abstract` | `final` | `sealed` | `implicit` | `lazy` )
+  def AccessMod: R1 = {
+    def AccessQualifier: R1 = rule( '[' ~ (`this` | Id) ~ ']' ~> Concat3 )
+    rule( (`private` | `protected`) ~ (AccessQualifier.? ~> ExtractOpt) ~> Concat )
   }
 
-  def Dcl: R0 = {
-    def VarDcl = rule( `var` ~ Ids ~ `:` ~ Type )
-    def FunDcl = rule( `def` ~ FunSig ~ (`:` ~ Type).? )
+  def Dcl: R1 = {
+    def VarDcl: R1 = rule( `var` ~ Ids ~ `:` ~ Type ~> Concat4 )
+    def FunDcl: R1 = rule( `def` ~ FunSig ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~> Concat3 )
     rule( ValDcl | VarDcl | FunDcl | TypeDcl )
   }
 
-  def Type: R0 = {
-    def FunctionArgTypes = rule('(' ~ ParamType.+(',').? ~ ')' )
-    def ArrowType = rule( FunctionArgTypes ~ `=>` ~ Type )
-    def ExistentialClause = rule( `forSome` ~ `{` ~ (TypeDcl | ValDcl).+(Semis) ~ `}` )
-    def PostfixType = rule( InfixType ~ (`=>` ~ Type | ExistentialClause.?) )
-    def Unbounded = rule( `_` | ArrowType | PostfixType )
-    rule( Unbounded ~ TypeBounds )
+  def Type: R1 = {
+    def FunctionArgTypes: R1 = rule('(' ~ ((ParamType.+(',') ~> ConcatSeqComma).? ~> ExtractOpt) ~ ')' ~> Concat3 )
+    def ArrowType: R1 = rule( FunctionArgTypes ~ `=>` ~ Type ~> Concat3 )
+    def ExistentialClause: R1 = rule( `forSome` ~ `{` ~ ((TypeDcl | ValDcl).+(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat4 )
+    def PostfixType: R1 = rule( InfixType ~ (`=>` ~ Type ~> Concat | ExistentialClause.? ~> ExtractOpt) ~> Concat )
+    def Unbounded: R1 = rule( `_` | ArrowType | PostfixType )
+    rule( Unbounded ~ TypeBounds ~> Concat )
   }
 
-  def InfixType = rule( CompoundType ~ (NotNewline ~ Id ~ OneNLMax ~ CompoundType).* )
+  def InfixType: R1 = rule( CompoundType ~ ((NotNewline ~ Id ~ OneNLMax ~ CompoundType ~> Concat3).* ~> ConcatSeqNoDelim) ~> Concat )
 
-  def CompoundType = {
-    def RefineStat = rule( TypeDef | Dcl  )
-    def Refinement = rule( OneNLMax ~ `{` ~ RefineStat.*(Semis) ~ `}` )
-    rule( AnnotType.+(`with`) ~ Refinement.? | Refinement )
+  def CompoundType: R1 = {
+    def RefineStat: R1 = rule( TypeDef | Dcl  )
+    def Refinement: R1 = rule( OneNLMax ~ `{` ~ (RefineStat.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat4 )
+    rule( (AnnotType.+(`withR0`) ~> ConcatSeqWith) ~ (Refinement.? ~> ExtractOpt) ~> Concat | Refinement )
   }
-  def AnnotType = rule(SimpleType ~ (NotNewline ~ (NotNewline ~ Annot).+).? )
+  def AnnotType: R1 = rule(SimpleType ~ ((NotNewline ~ (NotNewline ~ Annot).+ ~> ConcatSeqNoDelim).? ~> ExtractOpt) ~> Concat )
 
-  def SimpleType: R0 = {
-    def BasicType = rule( '(' ~ Types ~ ')'  | StableId ~ '.' ~ `type` | StableId )
-    rule( BasicType ~ (TypeArgs | `#` ~ Id).* )
-  }
-
-  def TypeArgs = rule( '[' ~ Types ~ "]" )
-  def Types = rule( Type.+(',') )
-
-  def ValDcl: R0 = rule( `val` ~ Ids ~ `:` ~ Type )
-  def TypeDcl: R0 = rule( `type` ~ Id ~ TypeArgList.? ~ TypeBounds )
-
-  def FunSig: R0 = {
-    def FunTypeArgs = rule( '[' ~ (Annot.* ~ TypeArg).+(',') ~ ']' )
-    def FunAllArgs = rule( FunArgs.* ~ (OneNLMax ~ '(' ~ `implicit` ~ Args ~ ')').? )
-    def FunArgs = rule( OneNLMax ~ '(' ~ Args.? ~ ')' )
-    def FunArg = rule( Annot.* ~ Id ~ (`:` ~ ParamType).? ~ (`=` ~ TypeExpr).? )
-    def Args = rule( FunArg.+(',') )
-    rule( (Id | `this`) ~ FunTypeArgs.? ~ FunAllArgs )
-  }
-  def ParamType = rule( `=>` ~ Type | Type ~ "*" | Type )
-
-  def TypeBounds: R0 = rule( (`>:` ~ Type).? ~ (`<:` ~ Type).? )
-  def TypeArg: R0 = {
-    def CtxBounds = rule((`<%` ~ Type).* ~ (`:` ~ Type).*)
-    rule((Id | `_`) ~ TypeArgList.? ~ TypeBounds ~ CtxBounds)
+  def SimpleType: R1 = {
+    def BasicType: R1 = rule( '(' ~ Types ~ ')' ~> Concat3 | StableId ~ '.' ~ `type` ~> Concat3 | StableId )
+    rule( BasicType ~ ((TypeArgs | `#` ~ Id ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
   }
 
-  def Annot: R0 = rule( `@` ~ SimpleType ~  ('(' ~ (Exprs ~ (`:` ~ `_*`).?).? ~ ")").*  )
+  def TypeArgs: R1 = rule( '[' ~ Types ~ "]" ~> Concat3 )
+  def Types: R1 = rule( Type.+(',') ~> ConcatSeqComma )
 
-  def TypeArgList: R0 = {
-    def Variant: R0 = rule( Annot.* ~ (WL ~ anyOf("+-")).? ~ TypeArg )
-    rule( '[' ~ Variant.*(',') ~ ']' )
+  def ValDcl : R1 = rule( `val` ~ Ids ~ `:` ~ Type ~> Concat4 )
+  def TypeDcl: R1 = rule( `type` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ TypeBounds ~> Concat4 )
+
+  def FunSig: R1 = {
+    def FunTypeArgs: R1 = rule( '[' ~ ((Annot.* ~> ConcatSeqNoDelim ~ TypeArg ~> Concat).+(',') ~> ConcatSeqComma) ~ ']' ~> Concat3 )
+    def FunAllArgs: R1  = rule( FunArgs.* ~> ConcatSeqNoDelim ~ ((OneNLMax ~ '(' ~ `implicit` ~ Args ~ ')' ~> Concat5).? ~> ExtractOpt) ~> Concat )
+    def FunArgs: R1     = rule( OneNLMax ~ '(' ~ (Args.? ~> ExtractOpt) ~ ')' ~> Concat4 )
+    def FunArg: R1      = rule( Annot.* ~> ConcatSeqNoDelim ~ Id ~ ((`:` ~ ParamType ~> Concat).? ~> ExtractOpt) ~ ((`=` ~ TypeExpr ~> Concat).? ~> ExtractOpt) ~> Concat4 )
+    def Args: R1        = rule( FunArg.+(',') ~> ConcatSeqComma )
+    rule( (Id | `this`) ~ (FunTypeArgs.? ~> ExtractOpt) ~ FunAllArgs ~> Concat3 )
   }
-  def Exprs: R0 = rule( TypeExpr.+(',') )
-  def TypeDef: R0 = rule( `type` ~ Id ~ TypeArgList.? ~ `=` ~ Type )
+  def ParamType: R1 = rule( `=>` ~ Type ~> Concat | Type ~ "*" ~> Concat | Type )
+
+  def TypeBounds: R1 = rule( (`>:` ~ Type ~> Concat).? ~> ExtractOpt ~ ((`<:` ~ Type ~> Concat).? ~> ExtractOpt) ~> Concat )
+  def TypeArg: R1 = {
+    def CtxBounds: R1 = rule((`<%` ~ Type ~> Concat).* ~> ConcatSeqNoDelim ~ ((`:` ~ Type ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat)
+    rule((Id | `_`) ~ (TypeArgList.? ~> ExtractOpt) ~ TypeBounds ~ CtxBounds ~> Concat4)
+  }
+
+  def Annot: R1 = {
+    def SugaredExprsBody: R1 = rule{ (Exprs ~ ((`:` ~ `_*` ~> Concat).? ~> ExtractOpt) ~> Concat).? ~> ExtractOpt }
+    def SugaredExprs: R1     = rule{ ('(' ~ SugaredExprsBody ~ ")" ~> Concat3).* ~> ConcatSeqNoDelim }
+    rule( `@` ~ SimpleType ~ SugaredExprs ~> Concat3 )
+  }
+
+  def TypeArgList: R1 = {
+    def Variant: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ (capture(WLR0 ~ anyOf("+-")).? ~> ExtractOpt) ~ TypeArg ~> Concat3 )
+    rule( '[' ~ (Variant.*(',') ~> ConcatSeqComma) ~ ']' ~> Concat3 )
+  }
+  def Exprs: R1 = rule( TypeExpr.+(',') ~> ConcatSeqComma )
+  def TypeDef: R1 = rule( `type` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ `=` ~ Type ~> Concat5 )
 }

@@ -11,10 +11,12 @@ trait RulesOps {
   def Concat7: (S, S, S, S, S, S, S) => S = _+_+_+_+_+_+_
 
   def ConcatSeq(delimiter: String): (Seq[String]) => String = _.mkString(delimiter)
+
   def ConcatSeqSemi    = ConcatSeq(";")
   def ConcatSeqNoDelim = ConcatSeq("" )
   def ConcatSeqComma   = ConcatSeq(",")
   def ConcatSeqDot     = ConcatSeq(".")
+  def ConcatSeqWith    = ConcatSeq(" with ")
 
   def ExtractOpt: Option[String] => String = _.getOrElse("")
 

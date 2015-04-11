@@ -13,12 +13,15 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
    * really useful in e.g. {} blocks, where we want to avoid
    * capturing newlines so semicolon-inference would work
    */
-  def WS: R1 = rule( (capture(Basic.WSChar) | Literals.Comment).* ~> ConcatSeqNoDelim )
+  def WSR0: R0 = rule( (Basic.WSChar | Literals.CommentR0).* )
+  // def WS  : R1 = rule( (capture(Basic.WSChar) | Literals.Comment).* ~> ConcatSeqNoDelim )
+  def WS: R1 = rule( capture(WSR0) )
 
   /**
    * Parses whitespace, including newlines.
    * This is the default for most things
    */
+  def WLR0: Rule0 = rule( (Basic.WSChar | Literals.CommentR0 | Basic.Newline).* )
   def WL: R1 = rule( (capture(Basic.WSChar) | Literals.Comment | capture(Basic.Newline)).* ~> ConcatSeqNoDelim )
 
 
@@ -35,10 +38,16 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
    * (W) and key-operators (O) which have different non-match criteria.
    */
   object KeyWordOperators {
-    def W(s: String): R1 = rule( WL ~ capture(Key.W(s)) ~> Concat )
+    def WR0(s: String): Rule0 = rule( WLR0 ~ Key.W(s) )
+
+    // def W(s: String): R1 = rule( WL ~ capture(Key.W(s)) ~> Concat )
+    def W(s: String): R1 = rule( capture(WR0(s)) )
     def O(s: String): R1 = rule( WL ~ capture(Key.O(s)) ~> Concat )
   }
   import KeyWordOperators._
+  // R0 versions of certain keywords
+  def `withR0` = WR0("with")
+
   // Keywords that match themselves and nothing else
   def `=>` = rule( O("=>") | O("⇒") )
   def `<-` = rule( O("<-") | O("←") )
@@ -98,11 +107,16 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
    */
   def pr(s: String) = rule( run(println(s"LOGGING $cursor: $s")) )
 
+  def SemiR0 : R0 = rule( WSR0 ~ Basic.Semi )
+  def SemisR0: R0 = rule( SemiR0.+ )
+
   def Id     : R1 = rule( WL ~ capture(Identifiers.Id)    ~> Concat )
   def VarId  : R1 = rule( WL ~ capture(Identifiers.VarId) ~> Concat )
   def Literal: R1 = rule( WL ~ Literals.Literal           ~> Concat )
-  def Semi   : R1 = rule( WS ~ capture(Basic.Semi)        ~> Concat )
-  def Semis  : R1 = rule( Semi.+                          ~> ConcatSeqNoDelim )
+  // def Semi   : R1 = rule( WS ~ capture(Basic.Semi)        ~> Concat )
+  // def Semis  : R1 = rule( Semi.+                          ~> ConcatSeqNoDelim )
+  def Semi   : R1 = rule( capture(SemiR0 ) )
+  def Semis  : R1 = rule( capture(SemisR0) )   
   def Newline: R1 = rule( WL ~ capture(Basic.Newline)     ~> Concat )
 
   def QualId: R1 = rule( WL ~ (Id.+('.') ~> ConcatSeqDot)~> Concat )

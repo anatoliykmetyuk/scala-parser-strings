@@ -20,10 +20,19 @@ trait Literals { self: Parser with Basic with Identifiers with RulesOps =>
 
     def Bool: R1 = rule( capture(Key.W("true") | Key.W("false"))  )
 
-    def MultilineComment: R1 = rule( capture("/*") ~ ((MultilineComment | capture(!"*/" ~ ANY)).* ~> ConcatSeqNoDelim) ~ capture("*/") ~> Concat3 )
-    def Comment: R1 = rule(
-      MultilineComment | capture("//" ~ (!Basic.Newline ~ ANY).* ~ &(Basic.Newline | EOI))
-    )
+    def MultilineCommentR0: Rule0 = rule( "/*" ~ (MultilineCommentR0 | !"*/" ~ ANY).* ~ "*/" )
+    // def MultilineComment  : R1 = rule( capture("/*") ~ ((MultilineComment | capture(!"*/" ~ ANY)).* ~> ConcatSeqNoDelim) ~ capture("*/") ~> Concat3 )
+    def MultilineComment: R1 = rule ( capture(MultilineCommentR0) )
+
+    def CommentR0: Rule0 = rule(
+      MultilineCommentR0 | "//" ~ (!Basic.Newline ~ ANY).* ~ &(Basic.Newline | EOI)
+    ) 
+    // def Comment: R1 = rule(
+    //   MultilineComment | capture("//" ~ (!Basic.Newline ~ ANY).* ~ &(Basic.Newline | EOI))
+    // )
+    def Comment: R1 = rule ( capture(CommentR0) )
+
+
     def Null: R1 = rule( capture(Key.W("null")) )
     def Literal: R1 = rule( (capture("-".?) ~ (Float | Int) ~> Concat) | Bool | Char | String | Symbol | Null )
 
