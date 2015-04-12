@@ -36,11 +36,13 @@ val root = project.in(file(".")).settings(
         </developer>
       </developers>
 
-  // ,excludeFilter in unmanagedSources := "Scala.scala"
- ,excludeFilter in (Test, unmanagedSources) := "ProjectTests.scala" || "UnitTests.scala"
+ // ,excludeFilter in unmanagedSources := "Scala.scala"
+ // ,excludeFilter in (Test, unmanagedSources) := "ProjectTests.scala" || "UnitTests.scala"
  ,initialCommands := """
     |import scalaParser._
     |import syntax._
     |import org.parboiled2._
+    |
+    |def p(in: String) = new Scala(in).CompilationUnit.run()
   """.stripMargin
 )

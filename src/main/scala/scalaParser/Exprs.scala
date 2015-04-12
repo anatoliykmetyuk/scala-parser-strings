@@ -17,14 +17,16 @@ trait Exprs extends Core with Types with Xml{
     def Selectors: R1 = rule( '{' ~ ((Selector ~ ',' ~> Concat).* ~> ConcatSeqNoDelim) ~ (Selector | `_`) ~ "}" ~> Concat4 )
     def Selector: R1 = rule( Id ~ ((`=>` ~ (Id | `_`) ~> Concat).? ~> ExtractOpt) ~> Concat )
     // !!! ',' can't be implicitly converted to have WL behind it, since it is R1.
-    rule( `import` ~ (ImportExpr.+(',') ~> ConcatSeqComma) ~> Concat )
+    def ImportExprOne: R1 = rule ( ImportExpr ~ ((',' ~ ImportExpr ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( `import` ~ ImportExprOne ~> Concat )
   }
 
   def Ascription: R1 = rule( `:` ~ (`_*` |  Type | Annot.+ ~> ConcatSeqNoDelim) ~> Concat )
 
   def LambdaHead: R1 = {
     def Binding: R1 = rule( (Id | `_`) ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~> Concat )
-    def Bindings: R1 = rule( '(' ~ (Binding.*(',') ~> ConcatSeqComma) ~ ')' ~> Concat3 )
+    def BindingZero: R1 = rule ( (Binding ~ ((',' ~ Binding ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt )
+    def Bindings: R1 = rule( '(' ~ BindingZero ~ ')' ~> Concat3 )
     def Implicit: R1 = rule( `implicit`.? ~> ExtractOpt ~ Id ~ ((`:` ~ InfixType ~> Concat).? ~> ExtractOpt) ~> Concat3 )
     rule( (Bindings | Implicit | `_` ~ (Ascription.? ~> ExtractOpt) ~> Concat) ~ `=>` ~> Concat )
   }
@@ -87,7 +89,8 @@ trait Exprs extends Core with Types with Xml{
     def Guard : R1 = rule( `if` ~ PostfixExpr ~> Concat )
   }
   def SimplePat: R1 = {
-    def ExtractorArgs: R1 = rule( Pat.*(',') ~> ConcatSeqComma )
+    def PatZero: R1 = rule ( (Pat ~ ((',' ~ Pat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt )
+    def ExtractorArgs: R1 = rule( PatZero )
     def Extractor: R1 = rule( StableId ~ (('(' ~ ExtractorArgs ~ ')' ~> Concat3).? ~> ExtractOpt) ~> Concat )
     def TupleEx: R1 = rule( '(' ~ (ExtractorArgs.? ~> ExtractOpt) ~ ')' ~> Concat3 )
     def Thingy: R1 = rule( `_` ~ ((`:` ~ TypePat ~> Concat).? ~> ExtractOpt) ~ !"*" ~> Concat )  // !"*" doesn't have an effect anyway, hence Concat and not Concat3
@@ -100,7 +103,8 @@ trait Exprs extends Core with Types with Xml{
     def Prelude: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ (`implicit`.? ~> ExtractOpt) ~ (`lazy`.? ~> ExtractOpt) ~ (LocalMod.* ~> ConcatSeqNoDelim) ~> Concat4 )
     def Tmpl: R1 = rule( Prelude ~ BlockDef ~> Concat )
     def BlockStat: R1 = rule( Import | Tmpl | StatCtx.Expr )
-    rule( BlockStat.+(SemisR0) ~> ConcatSeqSemi )
+    def BlockStatOne: R1 = rule ( BlockStat ~ ((Semis ~ BlockStat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( BlockStatOne )
   }
 
   def Block: R1 = {
@@ -110,9 +114,15 @@ trait Exprs extends Core with Types with Xml{
     rule( LambdaHead.* ~> ConcatSeqNoDelim ~ (Semis.? ~> ExtractOpt) ~ Body ~> Concat3 )
   }
 
-  def Patterns: R1 = rule( Pat.+(",") ~> ConcatSeqComma )
+  def Patterns: R1 = {
+    def PatOne: R1 = rule ( Pat ~ (("," ~ Pat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( PatOne )
+  }
   // !!! Problems might arise with pipe: whitespace before it is not likely to be permitted. In the real world, it is always almost present.
-  def Pat : R1 = rule( Pat1.+('|') ~> ConcatSeqPipe )
+  def Pat : R1 = {
+    def Pat1One: R1 = rule ( Pat1 ~ (('|' ~ Pat1 ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( Pat1One )
+  }
   def Pat1: R1 = rule( `_` ~ `:` ~ TypePat ~> Concat3 | VarId ~ `:` ~ TypePat ~> Concat3 | Pat2 )
   def Pat2: R1 = {
     def Pat3 = rule( `_*` | SimplePat ~ ((Id ~ SimplePat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )

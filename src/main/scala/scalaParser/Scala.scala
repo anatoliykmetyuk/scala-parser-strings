@@ -17,12 +17,16 @@ class Scala (val input: ParserInput)
     def Prelude : R1 = rule( (Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim ~ (Mod.* ~> ConcatSeqNoDelim) ~> Concat )
     def TmplStat: R1 = rule( Import | Prelude ~ (BlockDef | Dcl) ~> Concat | StatCtx.Expr )
     def SelfType: R1 = rule( (`this` | Id | `_`) ~ ((`:` ~ InfixType ~> Concat).? ~> ExtractOpt) ~ `=>` ~> Concat3 )
-    rule( '{' ~ (SelfType.? ~> ExtractOpt) ~ (Semis.? ~> ExtractOpt) ~ (TmplStat.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat5 )
+    def TmplStatZero: R1 = rule ( (TmplStat ~ ((Semis ~ TmplStat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt )
+    rule( '{' ~ (SelfType.? ~> ExtractOpt) ~ (Semis.? ~> ExtractOpt) ~ TmplStatZero ~ `}` ~> Concat5 )
   }
 
   def NewBody: R1 = rule( ClsTmpl | TmplBody )
 
-  def ValRhs: R1 = rule( Pat2.+(',') ~> ConcatSeqComma ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~ `=` ~ StatCtx.Expr ~> Concat4 )
+  def ValRhs: R1 = {
+    def Pat2One: R1 = rule ( Pat2 ~ ((',' ~ Pat2 ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    rule( Pat2One ~ ((`:` ~ Type ~> Concat).? ~> ExtractOpt) ~ `=` ~ StatCtx.Expr ~> Concat4 )
+  }
   def ValDef: R1 = rule( `val` ~ ValRhs ~> Concat )
   def VarDef: R1 = rule( `var` ~ Ids ~ `:` ~ Type ~ `=` ~ `_` ~> Concat6 | `var` ~ ValRhs ~> Concat )
 
@@ -40,8 +44,14 @@ class Scala (val input: ParserInput)
     def ClsArg: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ ClsArgMod ~ Id ~ `:` ~ ParamType ~ ((`=` ~ ExprCtx.Expr ~> Concat).? ~> ExtractOpt) ~> Concat6 )
 
     // Comma-separated, ponentially without spaces!!!
-    def Implicit: R1 = rule( OneNLMax ~ '(' ~ `implicit` ~ (ClsArg.+(",") ~> ConcatSeqComma) ~ ")" ~> Concat5 )
-    def ClsArgs: R1 = rule( OneNLMax ~'(' ~ (ClsArg.*(',') ~> ConcatSeqComma) ~ ")" ~> Concat4 )
+    def Implicit: R1 = {
+      def ClsArgOne: R1 = rule ( ClsArg ~ (("," ~ ClsArg ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+      rule( OneNLMax ~ '(' ~ `implicit` ~ ClsArgOne ~ ")" ~> Concat5 )
+    }
+    def ClsArgs: R1 = {
+      def ClsArgZero: R1 = rule ( (ClsArg ~ ((',' ~ ClsArg ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt )
+      rule( OneNLMax ~'(' ~ ClsArgZero ~ ")" ~> Concat4 )
+    }
     def AllArgs: R1 = rule( ClsArgs.+ ~> ConcatSeqNoDelim ~ (Implicit.? ~> ExtractOpt) ~> Concat | Implicit )
     rule( `case`.? ~> ExtractOpt ~ `class` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ (Prelude.? ~> ExtractOpt) ~ (AllArgs.? ~> ExtractOpt) ~ ClsTmplOpt ~> Concat7 )
   }
@@ -65,7 +75,8 @@ class Scala (val input: ParserInput)
 
   def EarlyDefs: R1 = {
     def EarlyDef: R1 = rule( ((Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim) ~ (Mod.* ~> ConcatSeqNoDelim) ~ (ValDef | VarDef) ~> Concat3 )
-    rule( `{` ~ (EarlyDef.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~ `with` ~> Concat4 )
+    def EarlyDefZero: R1 = rule ( (EarlyDef ~ ((Semis ~ EarlyDef ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt )
+    rule( `{` ~ EarlyDefZero ~ `}` ~ `with` ~> Concat4 )
   }
 
   def PkgObj: R1 = rule( `package` ~ ObjDef ~> Concat )
@@ -73,11 +84,16 @@ class Scala (val input: ParserInput)
   def TopStatSeq: R1 = {
     def Tmpl: R1 = rule( ((Annot ~ OneNLMax ~> Concat).* ~> ConcatSeqNoDelim) ~ (Mod.* ~> ConcatSeqNoDelim) ~ (TraitDef | ClsDef | ObjDef) ~> Concat3 )
     def TopStat: R1 = rule( PkgBlock | PkgObj | Import | Tmpl )
-    rule( TopStat.+(SemisR0) ~> ConcatSeqSemi )
+    // rule( TopStat.+(SemisR0) ~> ConcatSeqSemi )
+    rule {
+      TopStat ~ ((Semis ~ TopStat ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat
+    }
   }
 
   def CompilationUnit: R1 = {
-    def TopPackageSeq: R1 = rule( (`package` ~ QualId ~ !(WS ~ "{") ~> Concat).+(SemisR0) ~> ConcatSeqSemi )
+    def ThatPackageThingy: R1 = rule (`package` ~ QualId ~ !(WS ~ "{") ~> Concat)
+    def ThatPackageThingyOne: R1 = rule ( ThatPackageThingy ~ ((Semis ~ ThatPackageThingy ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+    def TopPackageSeq: R1 = rule( ThatPackageThingyOne )
     def Body: R1 = rule( TopPackageSeq ~ ((Semis ~ TopStatSeq ~> Concat).? ~> ExtractOpt) ~> Concat | TopStatSeq | capture(MATCH) )
     rule( Semis.? ~> ExtractOpt ~ Body ~ (Semis.? ~> ExtractOpt) ~ WL ~> Concat4 )
   }
