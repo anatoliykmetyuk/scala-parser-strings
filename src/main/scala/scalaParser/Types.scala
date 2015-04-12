@@ -21,9 +21,10 @@ trait Types extends Core{
   }
 
   def Type: R1 = {
-    def FunctionArgTypes: R1 = rule('(' ~ ((ParamType.+(',') ~> ConcatSeqComma).? ~> ExtractOpt) ~ ')' ~> Concat3 )
+    def FunctionArgTypes: R1 = rule('(' ~ (OneOrMore(() => ParamType, () => ',').? ~> ExtractOpt) ~ ')' ~> Concat3 )
     def ArrowType: R1 = rule( FunctionArgTypes ~ `=>` ~ Type ~> Concat3 )
-    def ExistentialClause: R1 = rule( `forSome` ~ `{` ~ ((TypeDcl | ValDcl).+(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat4 )
+    def TypeOrValDcl: R1 = rule(TypeDcl | ValDcl)
+    def ExistentialClause: R1 = rule( `forSome` ~ `{` ~ OneOrMore(() => TypeOrValDcl, () => Semis) ~ `}` ~> Concat4 )
     def PostfixType: R1 = rule( InfixType ~ (`=>` ~ Type ~> Concat | ExistentialClause.? ~> ExtractOpt) ~> Concat )
     def Unbounded: R1 = rule( `_` | ArrowType | PostfixType )
     rule( Unbounded ~ TypeBounds ~> Concat )
@@ -33,8 +34,8 @@ trait Types extends Core{
 
   def CompoundType: R1 = {
     def RefineStat: R1 = rule( TypeDef | Dcl  )
-    def Refinement: R1 = rule( OneNLMax ~ `{` ~ (RefineStat.*(SemisR0) ~> ConcatSeqSemi) ~ `}` ~> Concat4 )
-    rule( (AnnotType.+(`withR0`) ~> ConcatSeqWith) ~ (Refinement.? ~> ExtractOpt) ~> Concat | Refinement )
+    def Refinement: R1 = rule( OneNLMax ~ `{` ~ ZeroOrMore(() => RefineStat, () => Semis) ~ `}` ~> Concat4 )
+    rule( OneOrMore(() => AnnotType, () => `with`) ~ (Refinement.? ~> ExtractOpt) ~> Concat | Refinement )
   }
   def AnnotType: R1 = rule(SimpleType ~ ((NotNewline ~ ((NotNewline ~ Annot ~> Concat).+ ~> ConcatSeqNoDelim) ~> Concat).? ~> ExtractOpt) ~> Concat )
 
@@ -44,17 +45,18 @@ trait Types extends Core{
   }
 
   def TypeArgs: R1 = rule( '[' ~ Types ~ "]" ~> Concat3 )
-  def Types: R1 = rule( Type.+(',') ~> ConcatSeqComma )
+  def Types: R1 = rule( OneOrMore(() => Type, () => ',') )
 
   def ValDcl : R1 = rule( `val` ~ Ids ~ `:` ~ Type ~> Concat4 )
   def TypeDcl: R1 = rule( `type` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ TypeBounds ~> Concat4 )
 
   def FunSig: R1 = {
-    def FunTypeArgs: R1 = rule( '[' ~ ((Annot.* ~> ConcatSeqNoDelim ~ TypeArg ~> Concat).+(',') ~> ConcatSeqComma) ~ ']' ~> Concat3 )
+    def AnnotBlahBlah: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ TypeArg ~> Concat )
+    def FunTypeArgs: R1 = rule( '[' ~ OneOrMore(() => AnnotBlahBlah, () => ',') ~ ']' ~> Concat3 )
     def FunAllArgs: R1  = rule( FunArgs.* ~> ConcatSeqNoDelim ~ ((OneNLMax ~ '(' ~ `implicit` ~ Args ~ ')' ~> Concat5).? ~> ExtractOpt) ~> Concat )
     def FunArgs: R1     = rule( OneNLMax ~ '(' ~ (Args.? ~> ExtractOpt) ~ ')' ~> Concat4 )
     def FunArg: R1      = rule( Annot.* ~> ConcatSeqNoDelim ~ Id ~ ((`:` ~ ParamType ~> Concat).? ~> ExtractOpt) ~ ((`=` ~ TypeExpr ~> Concat).? ~> ExtractOpt) ~> Concat4 )
-    def Args: R1        = rule( FunArg.+(',') ~> ConcatSeqComma )
+    def Args: R1        = rule( OneOrMore(() => FunArg, () => ',') )
     rule( (Id | `this`) ~ (FunTypeArgs.? ~> ExtractOpt) ~ FunAllArgs ~> Concat3 )
   }
   def ParamType: R1 = rule( `=>` ~ Type ~> Concat | Type ~ "*" ~> Concat | Type )
@@ -73,8 +75,8 @@ trait Types extends Core{
 
   def TypeArgList: R1 = {
     def Variant: R1 = rule( Annot.* ~> ConcatSeqNoDelim ~ (capture(WLR0 ~ anyOf("+-")).? ~> ExtractOpt) ~ TypeArg ~> Concat3 )
-    rule( '[' ~ (Variant.*(',') ~> ConcatSeqComma) ~ ']' ~> Concat3 )
+    rule( '[' ~ ZeroOrMore(() => Variant, () => ',') ~ ']' ~> Concat3 )
   }
-  def Exprs: R1 = rule( TypeExpr.+(',') ~> ConcatSeqComma )
+  def Exprs: R1 = rule( OneOrMore(() => TypeExpr, () => ',') )
   def TypeDef: R1 = rule( `type` ~ Id ~ (TypeArgList.? ~> ExtractOpt) ~ `=` ~ Type ~> Concat5 )
 }
