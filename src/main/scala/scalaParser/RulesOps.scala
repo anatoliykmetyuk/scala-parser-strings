@@ -1,6 +1,8 @@
 package scalaParser
 
-trait RulesOps {
+import org.parboiled2._
+
+trait RulesOps {this: Parser =>
 
   type S = String
 
@@ -21,5 +23,12 @@ trait RulesOps {
   def ConcatSeqPipe    = ConcatSeq("|")
 
   def ExtractOpt: Option[String] => String = _.getOrElse("")
+
+  def OneOrMore(term: () => Rule1[String], delim: () => Rule1[String]): Rule1[String] =
+    rule ( term() ~ ((delim() ~ term() ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
+
+  def ZeroOrMore(term: () => Rule1[String], delim: () => Rule1[String]): Rule1[String] =
+    rule ( OneOrMore(term, delim).? ~> ExtractOpt )
+ 
 
 }

@@ -91,9 +91,7 @@ class Scala (val input: ParserInput)
   }
 
   def CompilationUnit: R1 = {
-    def ThatPackageThingy: R1 = rule (`package` ~ QualId ~ !(WS ~ "{") ~> Concat)
-    def ThatPackageThingyOne: R1 = rule ( ThatPackageThingy ~ ((Semis ~ ThatPackageThingy ~> Concat).* ~> ConcatSeqNoDelim) ~> Concat )
-    def TopPackageSeq: R1 = rule( ThatPackageThingyOne )
+    def TopPackageSeq: R1 = OneOrMore(() => rule (`package` ~ QualId ~ !(WS ~ "{") ~> Concat), () => Semis)
     def Body: R1 = rule( TopPackageSeq ~ ((Semis ~ TopStatSeq ~> Concat).? ~> ExtractOpt) ~> Concat | TopStatSeq | capture(MATCH) )
     rule( Semis.? ~> ExtractOpt ~ Body ~ (Semis.? ~> ExtractOpt) ~ WL ~> Concat4 )
   }
