@@ -119,8 +119,8 @@ abstract class Core extends Parser with syntax.Basic with syntax.Literals with s
   def Semis  : R1 = rule( capture(SemisR0) )   
   def Newline: R1 = rule( WL ~ capture(Basic.Newline)     ~> Concat )
 
-  def QualId: R1 = rule( WL ~ (Id.+('.') ~> ConcatSeqDot)~> Concat )
-  def Ids   : R1 = rule( Id.+(',') ~> ConcatSeqDot )
+  def QualId: R1 = rule( WL ~ OneOrMore(() => Id, () => '.') ~> Concat )
+  def Ids   : R1 = rule( OneOrMore(() => Id, () => ',') )
 
   def NotNewline: R1 = rule( capture(&( WS ~ !Basic.Newline )) )
   def OneNLMax: R1 = {
